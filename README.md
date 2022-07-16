@@ -23,7 +23,7 @@ Basic but very handy protection against debuggers and much more <br>
 
 ## :white_check_mark: 〢 Requirements ##
 
-Before starting :checkered_flag:, you are required to have [Python 3.9.7](https://www.python.org/downloads/release/python-397/) installed and [added to path](https://docs.blender.org/manual/en/latest/_images/about_contribute_install_windows_installer.png).
+Before starting :checkered_flag:, you are required to have [Python 3.8.0+](https://www.python.org/downloads/release/python-38/) installed and [added to path](https://docs.blender.org/manual/en/latest/_images/about_contribute_install_windows_installer.png).
 
 
 ## :file_folder: 〢 Getting Started ##
