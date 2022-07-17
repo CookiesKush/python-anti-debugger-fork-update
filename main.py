@@ -1,4 +1,3 @@
-import sys
 import sys, os, re, ctypes, subprocess, requests, uuid, wmi, psutil, threading, time, httpx, platform
 
 from datetime import datetime
