@@ -1,6 +1,6 @@
 <h1 align="center">Welcome to python anti debugger 👋</h1>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue.svg?cacheSeconds=2592000" >
+  <img src="https://img.shields.io/badge/version-2.1.0-blue.svg?cacheSeconds=2592000" >
   <img src="https://img.shields.io/badge/Maintained%3F-kinda-yellow.svg" >
   <img src="https://img.shields.io/github/last-commit/6nz/python-anti-debugger">
 </p>
@@ -18,7 +18,7 @@ Basic but very handy protection against debuggers and much more <br>
 
 :heavy_check_mark: Anti Debug\
 :heavy_check_mark: Anti Dll Injection\
-:heavy_check_mark: Blocklist IP, HWID, MAC, PCNAME, PCUSERNAME, GPU, PLATFORM
+:heavy_check_mark: Blacklist IP, HWID, MAC, PCNAME, PCUSERNAME, GPU, PLATFORM
 
 
 ## :white_check_mark: 〢 Requirements ##
@@ -36,7 +36,7 @@ Below is how to setup and create a payload.
 
 2. Enter your Webhook/API url in `main.py`
 ```python
-api = "URL_HERE"
+api = "ENTER_URL_HERE"
 ```
 
 4. Run `main.py`
@@ -47,7 +47,7 @@ api = "URL_HERE"
 ## :pushpin: 〢 Todo/Enhancements ##
 
 - [x] Kill anti debug proccess instead of closing program
-- [ ] Clean code some more
+- [x] Clean code some more
 - [ ] Remote import commands for even less detections
 
 
