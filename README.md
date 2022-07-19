@@ -1,6 +1,6 @@
 <h1 align="center">Welcome to python anti debugger 👋</h1>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue.svg?cacheSeconds=2592000" >
+  <img src="https://img.shields.io/badge/version-2.2.0-blue.svg?cacheSeconds=2592000" >
   <img src="https://img.shields.io/badge/Maintained%3F-kinda-yellow.svg" >
   <img src="https://img.shields.io/github/last-commit/6nz/python-anti-debugger">
 </p>
@@ -48,6 +48,7 @@ api = "ENTER_URL_HERE"
 
 - [x] Kill anti debug proccess instead of closing program
 - [x] Clean code some more
+- [x] Remove all print statements (to hide program output)
 - [ ] Remote import commands for even less detections
 
 
