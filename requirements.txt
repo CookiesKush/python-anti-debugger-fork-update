@@ -1,12 +1,5 @@
 requests
 psutil
 wmi
-dhooks
 win32api
 win32process
-discord
-
-
-
-
-
