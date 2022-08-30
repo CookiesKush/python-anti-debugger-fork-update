@@ -56,7 +56,7 @@ self.api = "URL_HERE"
 
 ## 👤 〢 Author ##
 
- 👤 **6nz** 
+ 👤 **6nz** <br>
  👤 **Callumgm** (contributor)
    
 
